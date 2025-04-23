@@ -1,12 +1,12 @@
-package com.example.gitpr.service;
+package Old.service;
 
-import com.example.gitpr.Model.PRModel;
-import com.example.gitpr.Model.RepoObject;
+import com.example.gitpr.Model.old.PRModel;
+import com.example.gitpr.Model.old.RepoObject;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-import com.example.gitpr.Model.RepoObject;
-import com.example.gitpr.Model.License;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,7 +15,8 @@ import java.util.List;
 @Service
 public class GitHubService {
 
-    RestClient restClient=RestClient.create();
+    RestClient restClient=RestClient.builder().
+            .build();
     List<String> openSourcelicenses=new ArrayList<>(){
         {
             add("0BSD");
@@ -133,9 +134,10 @@ public class GitHubService {
         }
     };
     List<RepoObject> openSourceRepos = new ArrayList<>();
+    List<String> forkFullNames=new ArrayList<>();
 
 
-    public List<RepoObject>  GetCommits(){
+    public List<RepoObject> CalculateOpenSourceRepos(){
 
          RepoObject[] result=
                 restClient.get().
@@ -143,13 +145,43 @@ public class GitHubService {
                         .accept(MediaType.APPLICATION_JSON)
                         .retrieve()
                         .body(RepoObject[].class);
+
+         List<RepoObject> fullrepos=new ArrayList<>();
         for(RepoObject repo: result){
-            if(isOpenSource(repo)){
-                openSourceRepos.add(repo);
+            String fullname=repo.getFullName();
+            RepoObject temprepo=restClient.get().
+                                uri("https://api.github.com/repos/"+fullname)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(RepoObject.class);
+            fullrepos.add(temprepo);
+
+        }
+        for(RepoObject repo: fullrepos){
+            if(isOpenSource(repo) && repo.isForked()){
+//                if (repo.getSource() == null) {
+//                    System.out.println("Warning: Repository is marked as a fork, but the parent is null. Repo: " + repo.getFullName());
+//                    continue; // Skip this repository
+//                }
+//                else {
+//                    System.out.println("soure is not null"+repo.getSource().getFull_name());
+//
+//                }
+                String parentname=repo.getSource().getFull_name();
+                //System.out.println(parentname);
+                RepoObject parentRepo=
+                        restClient.get().
+                                uri("https://api.github.com/repos/"+parentname)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .retrieve()
+                                .body(RepoObject.class);
+
+                openSourceRepos.add(parentRepo);
             }
         }
         return openSourceRepos;
     }
+
     private boolean isOpenSource(RepoObject repo) {
         if(repo.getLicense() == null) {
             return false;
@@ -161,7 +193,9 @@ public class GitHubService {
         }
         return false;
     }
-    public List<PRModel>  getPrsFromOpenSource() throws Exception{
+
+    public List<PRModel> getPRsFromOpenSource() throws Exception{
+        CalculateOpenSourceRepos();
         List<PRModel> allprs=new ArrayList<>();
         for(RepoObject repo:openSourceRepos){
             allprs.addAll(getPRs(repo));
@@ -169,20 +203,43 @@ public class GitHubService {
         return  allprs;
     }
 
-    public List<PRModel> getPRs(RepoObject repo) throws Exception{
+    public List<PRModel> getCommitsFromAuthor() throws Exception{
+        String authorName="sreekarsai193";
+        List<PRModel> allprs=getPRsFromOpenSource();
+        List<PRModel> prFromAuthor=new ArrayList<>();
+        for(PRModel pr:allprs){
+              if(pr.getUser().getLogin().equals(authorName)){
+                        prFromAuthor.add(pr);
+                }
+        }
+        return prFromAuthor;
+    }
 
-      PRModel[] prs=restClient.get().
-              uri("https://api.github.com/repos/sreekarsai193/"+ repo.getName()+"/commits").
-                accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .body(PRModel[].class);
+    private List<PRModel> getPRs(RepoObject repo) throws Exception{
+        String fullname=repo.getFullName();
+        List<PRModel> allPRs=new ArrayList<>();
+        int page=1;
 
-      if(prs==null) throw new Exception("Prs is null");
-      else System.out.println(repo.getName());
-      return Arrays.asList(prs);
+        while(true){
+            PRModel[] prs=restClient.get().
+                    uri("https://api.github.com/repos/"+fullname+"/pulls?state=all&page="+page+
+                            "&per_page=100").
+                    accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(PRModel[].class);
+            if(prs==null || prs.length==0 || page==2) break;
+
+            allPRs.addAll(Arrays.asList(prs));
+            page++;
+        }
+
+
+
+      return allPRs;
 
 
     }
+    // search api
 
 
 }

@@ -1,4 +1,4 @@
-package com.example.gitpr.Model;
+package Old.Controller.Model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
