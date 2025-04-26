@@ -16,9 +16,9 @@ public class GithubService {
     RestClient restClient=RestClient.builder().build();
 
 
-    public List<ItemsDto> getpr() {
+    public List<ItemsDto> getpr(String username) {
         PR pr= restClient.get()
-                .uri("https://api.github.com/search/issues?q=author:sreekarsai193")
+                .uri("https://api.github.com/search/issues?q=author:"+username)
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .body(PR.class);
